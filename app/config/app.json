@@ -1,0 +1,27 @@
+{
+  "app_name": "Арбитр - Система управления чатами",
+  "version": "2.0.0",
+  "default_settings": {
+    "api_endpoint": "https://api.openai.com/v1",
+    "api_timeout": 30,
+    "auto_save": false,
+    "available_models": [
+      "GPT-4",
+      "GPT-3.5-turbo",
+      "Claude-3",
+      "Claude-2",
+      "PaLM-2",
+      "Gemini Pro"
+    ]
+  },
+  "ui": {
+    "window_width": 1200,
+    "window_height": 800,
+    "theme": "default"
+  },
+  "logging": {
+    "enabled": true,
+    "max_log_entries": 1000,
+    "export_format": "txt"
+  }
+}
