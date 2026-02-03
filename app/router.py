@@ -115,12 +115,20 @@ class Router:
         responses = []
 
         for role in roles:
+            prompt = role.creation
+            composed_request = f"{prompt}\n\n{message.content}" if prompt else message.content
             # Simulate response - in real implementation would call actual AI APIs
             response = Message(
                 content=f"[Симуляция ответа от {role.model}]",
                 message_type=MessageType.AI_RESPONSE,
                 sender=role.name,
-                metadata={"role": role.name, "model": role.model}
+                metadata={
+                    "role": role.name,
+                    "model": role.model,
+                    "prompt": prompt,
+                    "request": composed_request,
+                    "file_path": message.metadata.get("file_path")
+                }
             )
             responses.append(response)
 

@@ -122,17 +122,8 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
         """Connect signals from tabs to handlers."""
         # Client Chat signals
-        self.client_chat_tab.connection_added.connect(
-            lambda conn: self._update_status(f"Добавлено соединение: {conn}")
-        )
-        self.client_chat_tab.search_requested.connect(
-            lambda query: self._update_status(f"Поиск выполнен: {query}")
-        )
-        self.client_chat_tab.team_call_added.connect(
-            lambda call: self._update_status(f"Добавлен {call}")
-        )
-        self.client_chat_tab.roles_started.connect(
-            lambda: self._update_status("Все роли отправлены")
+        self.client_chat_tab.send_request_clicked.connect(
+            self.main_chat_tab.send_current_message
         )
 
         # Main Chat signals
@@ -256,7 +247,7 @@ class MainWindow(QMainWindow):
             self.controller.load_data()
 
             # Reload all tabs
-            self.client_chat_tab.load_connections()
+            self.client_chat_tab.refresh_connection_indicators()
             self.roles_tab.load_roles()
             self.tasks_tab.load_data()
             self.settings_tab._load_settings()
