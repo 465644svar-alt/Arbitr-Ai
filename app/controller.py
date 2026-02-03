@@ -43,6 +43,7 @@ class Controller:
             "api_endpoint": "https://api.openai.com/v1",
             "api_timeout": 30,
             "auto_save": False,
+            "access_key": "",
             "available_models": [
                 "GPT-4",
                 "GPT-3.5-turbo",

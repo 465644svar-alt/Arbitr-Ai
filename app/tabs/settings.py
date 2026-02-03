@@ -32,6 +32,10 @@ class SettingsTab(QWidget):
         api_group = self._create_api_section()
         layout.addWidget(api_group)
 
+        # Access settings
+        access_group = self._create_access_section()
+        layout.addWidget(access_group)
+
         # Connection indicator
         conn_group = self._create_connection_section()
         layout.addWidget(conn_group)
@@ -67,9 +71,26 @@ class SettingsTab(QWidget):
         group.setLayout(layout)
         return group
 
+    def _create_access_section(self) -> QGroupBox:
+        """Create access settings section."""
+        group = QGroupBox("2. Доступ (TG бот)")
+        layout = QFormLayout()
+
+        self.access_key_input = QLineEdit()
+        self.access_key_input.setEchoMode(QLineEdit.Password)
+        self.access_key_input.setPlaceholderText("Введите ключ доступа")
+        layout.addRow("Ключ доступа:", self.access_key_input)
+
+        save_access_btn = QPushButton("Сохранить ключ доступа")
+        save_access_btn.clicked.connect(self._on_save_access_settings)
+        layout.addRow(save_access_btn)
+
+        group.setLayout(layout)
+        return group
+
     def _create_connection_section(self) -> QGroupBox:
         """Create connection indicator section."""
-        group = QGroupBox("2. Индикатор соединения")
+        group = QGroupBox("3. Индикатор соединения")
         layout = QVBoxLayout()
 
         self.connection_label = QLabel("Статус: Отключено")
@@ -87,7 +108,7 @@ class SettingsTab(QWidget):
 
     def _create_save_section(self) -> QGroupBox:
         """Create save/load section."""
-        group = QGroupBox("3. Сохранение")
+        group = QGroupBox("4. Сохранение")
         layout = QVBoxLayout()
 
         self.auto_save_checkbox = QCheckBox("Автоматическое сохранение")
@@ -127,6 +148,12 @@ class SettingsTab(QWidget):
 
         self.controller.update_settings(settings)
         QMessageBox.information(self, "Успех", "API настройки сохранены")
+
+    def _on_save_access_settings(self):
+        """Handle saving access settings."""
+        access_key = self.access_key_input.text().strip()
+        self.controller.update_settings({"access_key": access_key})
+        QMessageBox.information(self, "Успех", "Ключ доступа сохранен")
 
     def _on_test_connection(self):
         """Handle connection test."""
@@ -198,3 +225,4 @@ class SettingsTab(QWidget):
         self.api_endpoint_input.setText(settings.get("api_endpoint", ""))
         self.api_timeout_input.setText(str(settings.get("api_timeout", 30)))
         self.auto_save_checkbox.setChecked(settings.get("auto_save", False))
+        self.access_key_input.setText(settings.get("access_key", ""))
