@@ -1,8 +1,16 @@
 """Main Chat tab - primary chat interface with AI responses."""
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QTextEdit, QGroupBox
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QLineEdit,
+    QTextEdit,
+    QGroupBox,
+    QFileDialog,
+    QMessageBox,
 )
 from PySide6.QtCore import Signal, QTimer
 
@@ -16,6 +24,7 @@ class MainChatTab(QWidget):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
+        self.attached_file = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -41,6 +50,9 @@ class MainChatTab(QWidget):
         # Input section
         input_layout = self._create_input_section()
         layout.addLayout(input_layout)
+
+        attachment_layout = self._create_attachment_section()
+        layout.addLayout(attachment_layout)
 
     def _create_chat_display(self) -> QGroupBox:
         """Create main chat display section."""
@@ -91,23 +103,41 @@ class MainChatTab(QWidget):
         layout.addWidget(self.message_input)
 
         send_btn = QPushButton("Отправить")
-        send_btn.clicked.connect(self._on_send_message)
+        send_btn.clicked.connect(self.send_current_message)
         layout.addWidget(send_btn)
 
         return layout
 
-    def _on_send_message(self):
+    def _create_attachment_section(self) -> QHBoxLayout:
+        """Create attachment section."""
+        layout = QHBoxLayout()
+
+        attach_btn = QPushButton("Прикрепить файл")
+        attach_btn.clicked.connect(self._on_attach_file)
+        layout.addWidget(attach_btn)
+
+        self.file_label = QLabel("Файл не выбран")
+        layout.addWidget(self.file_label)
+
+        clear_btn = QPushButton("Очистить файл")
+        clear_btn.clicked.connect(self._on_clear_file)
+        layout.addWidget(clear_btn)
+
+        return layout
+
+    def send_current_message(self):
         """Handle sending a message."""
         text = self.message_input.text().strip()
         if not text:
             return
 
         # Send message through controller
-        message = self.controller.send_message(text)
+        message = self.controller.send_request(text, self.attached_file)
 
         # Display in chat
         self.chat_display.append(message.format())
         self.message_input.clear()
+        self._on_clear_file()
 
         # Emit signal
         self.message_sent.emit(text)
@@ -122,11 +152,15 @@ class MainChatTab(QWidget):
         # Get recent AI responses
         ai_responses = [m for m in messages if m.message_type.value == "ai_response"]
         arbiter_messages = [m for m in messages if m.message_type.value == "arbiter"]
+        system_messages = [m for m in messages if m.message_type.value == "system"]
 
         # Display in chat
         if arbiter_messages:
             latest_arbiter = arbiter_messages[-1]
             self.chat_display.append(latest_arbiter.format())
+        if system_messages:
+            latest_system = system_messages[-1]
+            self.chat_display.append(latest_system.format())
 
         # Display AI responses
         if ai_responses:
@@ -144,3 +178,29 @@ class MainChatTab(QWidget):
         self.chat_display.clear()
         self.qa_display.clear()
         self.role_task_display.clear()
+
+    def _on_attach_file(self):
+        """Attach a file to the request."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выберите файл",
+            "",
+            "All Files (*)"
+        )
+        if file_path:
+            self.attached_file = file_path
+            self.file_label.setText(file_path)
+
+    def _on_clear_file(self):
+        """Clear attached file."""
+        self.attached_file = None
+        self.file_label.setText("Файл не выбран")
+
+    def show_processing_status(self):
+        """Display current processing status in chat."""
+        status = self.controller.get_processing_status()
+        self.chat_display.append(f"[Статус] {status}")
+
+    def _on_send_message(self):
+        """Compatibility hook (unused)."""
+        self.send_current_message()

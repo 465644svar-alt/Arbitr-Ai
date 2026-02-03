@@ -33,6 +33,10 @@ class Controller:
 
         # Connection status
         self.is_connected = False
+        self.processing_status = "Ожидание запроса."
+        self.is_processing = False
+
+        self._sync_model_connections()
 
         self.logger.log("Контроллер инициализирован")
 
@@ -45,14 +49,18 @@ class Controller:
             "auto_save": False,
             "access_key": "",
             "available_models": [
-                "GPT-4",
-                "GPT-3.5-turbo",
-                "Claude-3",
-                "Claude-2",
-                "PaLM-2",
-                "Gemini Pro"
+                "GPT",
+                "DeepSeek",
+                "Mistral",
+                "Groq"
             ]
         }
+
+    def _sync_model_connections(self) -> None:
+        """Ensure router connections exist for available models."""
+        for model in self.settings.get("available_models", []):
+            self.router.add_connection(model)
+            self.router.set_connection_status(model, self.is_connected)
 
     # Role Management
     def add_role(self, necessity: str, model: str, creation: str) -> Role:
@@ -176,6 +184,8 @@ class Controller:
 
         # Route to roles
         if self.roles:
+            self.is_processing = True
+            self.processing_status = "Отправка промптов ролей и запроса..."
             responses = self.router.broadcast_to_roles(message, self.roles)
             self.messages.extend(responses)
 
@@ -194,7 +204,114 @@ class Controller:
             )
             self.messages.append(arbiter_msg)
 
+            log_path = self._create_response_log(message, responses)
+            log_message = Message(
+                content=f"Лог файл с ответами сохранен: {log_path}",
+                message_type=MessageType.SYSTEM,
+                sender="Система",
+                metadata={"log_path": log_path}
+            )
+            self.messages.append(log_message)
+            self.processing_status = f"Готово. Лог файл создан: {log_path}"
+            self.is_processing = False
+
         return message
+
+    def send_request(self, content: str, file_path: Optional[str] = None) -> Message:
+        """Send a request that may include a file reference."""
+        metadata = {}
+        display_content = content
+        if file_path:
+            metadata["file_path"] = file_path
+            display_content = f"{content}\n[Файл: {file_path}]"
+
+        message = Message(
+            content=display_content,
+            message_type=MessageType.USER,
+            metadata=metadata
+        )
+        self.messages.append(message)
+        self.logger.log(f"Отправлен запрос: {content[:50]}...")
+
+        if not self.arbiter.validate_message(message):
+            self.logger.log("Запрос не прошел валидацию")
+            return message
+
+        if not self.roles:
+            self.processing_status = "Нет промптов ролей. Создайте промпты во вкладке 'I Роль'."
+            self.logger.log(self.processing_status)
+            return message
+
+        self.is_processing = True
+        self.processing_status = "Отправка промптов ролей и запроса..."
+        responses = self.router.broadcast_to_roles(message, self.roles)
+        self.messages.extend(responses)
+
+        response_dicts = [
+            {"model": r.metadata.get("model"), "content": r.content}
+            for r in responses
+        ]
+        self.arbiter.arbitrate_responses(response_dicts)
+
+        arbiter_msg = Message(
+            content="Проверка вопроса/ответов нейросетей... ✓",
+            message_type=MessageType.ARBITER,
+            sender="Арбитр GPT"
+        )
+        self.messages.append(arbiter_msg)
+
+        log_path = self._create_response_log(message, responses)
+        log_message = Message(
+            content=f"Лог файл с ответами сохранен: {log_path}",
+            message_type=MessageType.SYSTEM,
+            sender="Система",
+            metadata={"log_path": log_path}
+        )
+        self.messages.append(log_message)
+
+        self.processing_status = f"Готово. Лог файл создан: {log_path}"
+        self.is_processing = False
+        return message
+
+    def _create_response_log(self, message: Message, responses: List[Message]) -> str:
+        """Create a response log file from AI responses."""
+        from datetime import datetime
+
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+        filename = f"response_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        path = logs_dir / filename
+
+        file_path = message.metadata.get("file_path")
+        prompt_lines = []
+        for response in responses:
+            prompt = response.metadata.get("prompt", "")
+            if prompt:
+                prompt_lines.append(f"- {response.metadata.get('model')}: {prompt}")
+
+        response_lines = []
+        for response in responses:
+            response_lines.append(
+                f"[{response.metadata.get('model')}] {response.content}"
+            )
+
+        content = [
+            "=== ЛОГ ОТВЕТОВ НЕЙРОСЕТЕЙ ===",
+            f"Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "",
+            "Запрос пользователя:",
+            message.content,
+        ]
+        if file_path:
+            content.extend(["", f"Файл запроса: {file_path}"])
+        if prompt_lines:
+            content.extend(["", "Промпты ролей:", *prompt_lines])
+        content.extend(["", "Ответы нейросетей:", *response_lines])
+        content.append("=== КОНЕЦ ЛОГА ===")
+
+        path.write_text("\n".join(content), encoding="utf-8")
+        self.logger.log(f"Создан лог ответов: {path}")
+        return str(path)
 
     def get_messages(self) -> List[Message]:
         """Get all messages."""
@@ -212,6 +329,8 @@ class Controller:
     def test_connection(self) -> bool:
         """Test connection (simulated)."""
         self.is_connected = not self.is_connected
+        for model in self.router.get_connections():
+            self.router.set_connection_status(model, self.is_connected)
         status = "Подключено" if self.is_connected else "Отключено"
         self.logger.log(f"Тест соединения: {status}")
         return self.is_connected
@@ -220,11 +339,23 @@ class Controller:
     def update_settings(self, settings: Dict) -> None:
         """Update application settings."""
         self.settings.update(settings)
+        self._sync_model_connections()
         self.logger.log("Настройки обновлены")
 
     def get_settings(self) -> Dict:
         """Get current settings."""
         return self.settings.copy()
+
+    def get_processing_status(self) -> str:
+        """Get current processing status."""
+        return self.processing_status
+
+    def get_model_statuses(self) -> Dict[str, bool]:
+        """Get connection status per model."""
+        statuses = {}
+        for model in self.settings.get("available_models", []):
+            statuses[model] = model in self.router.get_active_connections()
+        return statuses
 
     # Data Persistence
     def save_data(self, filepath: str = "settings.json") -> None:
