@@ -22,6 +22,9 @@ def main():
 
     # Create and show main window
     window = MainWindow()
+    if not window.access_granted:
+        sys.exit(0)
+
     window.show()
 
     # Run application

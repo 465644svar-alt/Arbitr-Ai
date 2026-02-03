@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QTabWidget,
-    QLabel, QStatusBar, QMessageBox
+    QLabel, QStatusBar, QMessageBox, QInputDialog, QLineEdit
 )
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
@@ -24,6 +24,7 @@ class MainWindow(QMainWindow):
 
         # Initialize controller
         self.controller = Controller()
+        self._load_settings_on_startup()
 
         # Setup UI
         self.setWindowTitle("Арбитр - Система управления чатами")
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
 
         # Log initialization
         self.controller.logger.log("Приложение запущено")
+        self.access_granted = self._require_access_key()
 
     def _setup_ui(self):
         """Setup the main user interface."""
@@ -175,6 +177,48 @@ class MainWindow(QMainWindow):
         self.logs_tab.logs_exported.connect(
             lambda filename: self._update_status(f"Логи экспортированы: {filename}")
         )
+
+    def _load_settings_on_startup(self):
+        """Load saved settings if available."""
+        try:
+            self.controller.load_data()
+        except FileNotFoundError:
+            self.controller.logger.log("Файл настроек не найден при старте")
+
+    def _require_access_key(self) -> bool:
+        """Require access key if configured."""
+        settings = self.controller.get_settings()
+        access_key = settings.get("access_key", "").strip()
+        if not access_key:
+            return True
+
+        entered_key, ok = QInputDialog.getText(
+            self,
+            "Доступ к приложению",
+            "Введите ключ доступа из TG бота:",
+            QLineEdit.Password
+        )
+
+        if not ok:
+            QMessageBox.critical(
+                self,
+                "Доступ запрещен",
+                "Запуск отменен без ключа доступа."
+            )
+            self.controller.logger.log("Доступ отменен пользователем")
+            return False
+
+        if entered_key.strip() != access_key:
+            QMessageBox.critical(
+                self,
+                "Доступ запрещен",
+                "Неверный ключ доступа."
+            )
+            self.controller.logger.log("Введен неверный ключ доступа")
+            return False
+
+        self.controller.logger.log("Ключ доступа подтвержден")
+        return True
 
     def _update_status(self, message: str):
         """Update status bar message."""
